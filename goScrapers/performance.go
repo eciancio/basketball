@@ -57,7 +57,7 @@ func newPlayerPerformance() *PlayerPerformance {
 		"orb": "0",
 		"drb": "0",
 		"trb": "0",
-		"blk": "0",
+		"blk": "-1",
 		"tov": "0",
 		"pf": "0",
 		"pts": "0",
@@ -68,6 +68,7 @@ func newPlayerPerformance() *PlayerPerformance {
 		"fta_per_fga_pct": "0",
 		"orb_pct": "0",
 		"drb_pct": "0",
+		"trb_pct": "0",
 		"ast_pct": "0",
 		"stl_pct": "0",
 		"blk_pct": "0",
@@ -85,14 +86,19 @@ func newPlayerPerformance() *PlayerPerformance {
 }
 
 func (p *PlayerPerformance) addToTable(db *sql.DB, dateID string) {
+	defer waitGroup.Done()
+    if _, ok := p.stats["reason"]; ok {
+        // fmt.Println(p.stats)
+        <-sem
+        return
+    }
     insertPerformance := "INSERT INTO performance (points, minutesPlayed, fieldGoals, fieldGoalsAttempted, fieldGoalPercent, 3PM, 3PA, 3PPercent, FT, FTA, FTPercent, offensiveRebounds, defensiveRebounds, totalRebounds, assists,  steals, blocks, turnovers, personalFouls, plusMinus, trueShootingPercent, effectiveFieldGoalPercent, 3pointAttemptRate, freeThrowAttemptRate, offensiveReboundPercent, defensiveReboundPercent, totalReboundPercent, assistPercent, stealPercent, blockPercent, turnoverPercent, usagePercent, offensiveRating, defensiveRating,  tripleDouble, doubleDouble, team, opponent, home, playerID, dateID) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     playerID := getPlayerID(p.bbrefid,db)
-    _, err := db.Exec(insertPerformance, p.stats["pts"], p.stats["mp"], p.stats["fg"], p.stats["fga"], p.stats["fg_pct"], p.stats["fg3"], p.stats["fg3a"], p.stats["fg3_pct"], p.stats["ft"], p.stats["ft"], p.stats["fta"], p.stats["ft_pct"], p.stats["orb"], p.stats["drb"], p.stats["trb"], p.stats["ast"], p.stats["stl"], p.stats["blk"], p.stats["tov"], p.stats["pf"], p.stats["plus_minus"], p.stats["ts_pct"], p.stats["efg_pct"], p.stats["fg3a_per_fga_pct"], p.stats["fta_per_fga_pct"], p.stats["orb_pct"], p.stats["drb_pct"], p.stats["ast_pct"], p.stats["stl_pct"], p.stats["blk_pct"], p.stats["tov_pct"], p.stats["usg_pct"], p.stats["off_rtg"], p.stats["def_rtg"], p.stats["triple_double"], p.stats["double_double"], p.stats["team"], p.stats["opp"], p.stats["home"], playerID, dateID)
+    _, err := db.Exec(insertPerformance, p.stats["pts"], p.stats["mp"], p.stats["fg"], p.stats["fga"], p.stats["fg_pct"], p.stats["fg3"], p.stats["fg3a"], p.stats["fg3_pct"], p.stats["ft"], p.stats["fta"], p.stats["ft_pct"], p.stats["orb"], p.stats["drb"], p.stats["trb"], p.stats["ast"], p.stats["stl"], p.stats["blk"], p.stats["tov"], p.stats["pf"], p.stats["plus_minus"], p.stats["ts_pct"], p.stats["efg_pct"], p.stats["fg3a_per_fga_pct"], p.stats["fta_per_fga_pct"], p.stats["orb_pct"], p.stats["drb_pct"], p.stats["trb_pct"], p.stats["ast_pct"], p.stats["stl_pct"], p.stats["blk_pct"], p.stats["tov_pct"], p.stats["usg_pct"], p.stats["off_rtg"], p.stats["def_rtg"], p.stats["triple_double"], p.stats["double_double"], p.stats["team"], p.stats["opp"], p.stats["home"], playerID, dateID)
     if err != nil {
         fmt.Println(err)
     }
     <-sem
-	waitGroup.Done()
 }
 
 func getBoxScoreUrls(dateID string, db *sql.DB) []string {
@@ -107,6 +113,7 @@ func getBoxScoreUrls(dateID string, db *sql.DB) []string {
         rows.Scan(&boxScore)
 		urls = append(urls, boxScore)
     }
+    fmt.Println(urls)
     return urls // retunrs urls 
 }
 
