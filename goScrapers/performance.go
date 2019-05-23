@@ -1,9 +1,9 @@
 package main
 
 import (
+    "os"
 	"sync"
     "fmt"
-    "time"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
     "golang.org/x/net/html"
@@ -23,7 +23,22 @@ const (
 
 type PlayerPerformance struct {
 	bbrefid string
+	dateID string
 	stats map[string]string
+}
+
+func getPlayerID(bbref string, db *sql.DB) string {
+    var playerID string
+    selectPlayerID := "select playerID from player_reference where bbrefID=?"
+    rows, err:= db.Query(selectPlayerID, bbref)
+    if err != nil {
+        fmt.Println(err)
+    }
+    defer rows.Close()
+    for rows.Next() {
+        rows.Scan(&playerID)
+    }
+    return playerID
 }
 
 func newPlayerPerformance() *PlayerPerformance {
@@ -69,10 +84,9 @@ func newPlayerPerformance() *PlayerPerformance {
 	return &player
 }
 
-func (p *PlayerPerformance) addToTable(db *sql.DB) {
+func (p *PlayerPerformance) addToTable(db *sql.DB, dateID string) {
     insertPerformance := "INSERT INTO performance (points, minutesPlayed, fieldGoals, fieldGoalsAttempted, fieldGoalPercent, 3PM, 3PA, 3PPercent, FT, FTA, FTPercent, offensiveRebounds, defensiveRebounds, totalRebounds, assists,  steals, blocks, turnovers, personalFouls, plusMinus, trueShootingPercent, effectiveFieldGoalPercent, 3pointAttemptRate, freeThrowAttemptRate, offensiveReboundPercent, defensiveReboundPercent, totalReboundPercent, assistPercent, stealPercent, blockPercent, turnoverPercent, usagePercent, offensiveRating, defensiveRating,  tripleDouble, doubleDouble, team, opponent, home, playerID, dateID) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    playerID := "2748"
-    dateID := "911"
+    playerID := getPlayerID(p.bbrefid,db)
     _, err := db.Exec(insertPerformance, p.stats["pts"], p.stats["mp"], p.stats["fg"], p.stats["fga"], p.stats["fg_pct"], p.stats["fg3"], p.stats["fg3a"], p.stats["fg3_pct"], p.stats["ft"], p.stats["ft"], p.stats["fta"], p.stats["ft_pct"], p.stats["orb"], p.stats["drb"], p.stats["trb"], p.stats["ast"], p.stats["stl"], p.stats["blk"], p.stats["tov"], p.stats["pf"], p.stats["plus_minus"], p.stats["ts_pct"], p.stats["efg_pct"], p.stats["fg3a_per_fga_pct"], p.stats["fta_per_fga_pct"], p.stats["orb_pct"], p.stats["drb_pct"], p.stats["ast_pct"], p.stats["stl_pct"], p.stats["blk_pct"], p.stats["tov_pct"], p.stats["usg_pct"], p.stats["off_rtg"], p.stats["def_rtg"], p.stats["triple_double"], p.stats["double_double"], p.stats["team"], p.stats["opp"], p.stats["home"], playerID, dateID)
     if err != nil {
         fmt.Println(err)
@@ -81,10 +95,10 @@ func (p *PlayerPerformance) addToTable(db *sql.DB) {
 	waitGroup.Done()
 }
 
-func getBoxScoreUrls(startDay time.Time, endDay time.Time, db *sql.DB) []string {
+func getBoxScoreUrls(dateID string, db *sql.DB) []string {
     var boxScore string
     urls := make([]string, 0)
-    rows, err:= db.Query("Select url from box_score_urls WHERE dateID >= ? AND dateID <= ?", 910,910)
+    rows, err:= db.Query("Select url from box_score_urls WHERE dateID >= ? AND dateID <= ?", dateID, dateID)
     if err != nil {
         fmt.Println(err)
     }
@@ -119,6 +133,7 @@ func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, t
                         player = val
                     } else {
                         player = newPlayerPerformance()
+                        player.bbrefid = t.Attr[2].Val
                         playerMap[t.Attr[2].Val] = player
                     }
                     player.stats["team"] = team
@@ -146,7 +161,7 @@ func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, t
 }
 
 
-func getTables(url string, db *sql.DB)  {
+func getTables(url string, db *sql.DB, dateID string) {
     playerMap := make(map[string]*PlayerPerformance)
 	resp, _ := http.Get(url)
 	z := html.NewTokenizer(resp.Body)
@@ -183,16 +198,16 @@ func getTables(url string, db *sql.DB)  {
         }
         sem <-1
 		waitGroup.Add(1)
-        go val.addToTable(db)
+        go val.addToTable(db, dateID)
     }
 	waitGroup.Done()
 
 }
-func updateAndInsertPlayerRef(startDay time.Time, endDay time.Time, db *sql.DB) {
-    urls := getBoxScoreUrls(startDay, endDay, db)
+func updateAndInsertPlayerRef(dateID string, db *sql.DB) {
+    urls := getBoxScoreUrls(dateID, db)
 	for _, url := range urls {
 		waitGroup.Add(1)
-		go getTables(url, db)
+		go getTables(url, db, dateID)
 	}
 }
 func main() {
@@ -203,9 +218,9 @@ func main() {
 		fmt.Println(err)
 	}
 	defer db.Close()
+	arguements := os.Args
+    dateID := arguements[1]
 
-    startDay := time.Now()
-    endDay := time.Now()
-    updateAndInsertPlayerRef(startDay, endDay, db)
+    updateAndInsertPlayerRef(dateID, db)
 	waitGroup.Wait()
 }
