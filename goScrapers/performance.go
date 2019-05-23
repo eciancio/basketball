@@ -18,13 +18,14 @@ const (
 	user     = "wsa@wsabasketball"
 	database = "basketball"
 	host     = "wsabasketball.mysql.database.azure.com"
-	password = "LeBron>MJ!"
+	password = ""
 )
 
+// Player Performance Object
 type PlayerPerformance struct {
-	bbrefid string
+	bbrefid string // basketball reference id
 	dateID string
-	stats map[string]string
+	stats map[string]string // all the scraped stats go in here
 }
 
 func getPlayerID(bbref string, db *sql.DB) string {
@@ -43,6 +44,7 @@ func getPlayerID(bbref string, db *sql.DB) string {
 
 func newPlayerPerformance() *PlayerPerformance {
 	var player PlayerPerformance
+    // initilize the map of player stats
 	player.stats = map[string]string {
 		"mp": "0",
 		"fg": "0",
@@ -85,11 +87,11 @@ func newPlayerPerformance() *PlayerPerformance {
 	return &player
 }
 
+// Add all the player stats to the table on dateid
 func (p *PlayerPerformance) addToTable(db *sql.DB, dateID string) {
 	defer waitGroup.Done()
-    if _, ok := p.stats["reason"]; ok {
-        // fmt.Println(p.stats)
-        <-sem
+    if _, ok := p.stats["reason"]; ok { // this player did not play
+        <-sem // increment the semaphor
         return
     }
     insertPerformance := "INSERT INTO performance (points, minutesPlayed, fieldGoals, fieldGoalsAttempted, fieldGoalPercent, 3PM, 3PA, 3PPercent, FT, FTA, FTPercent, offensiveRebounds, defensiveRebounds, totalRebounds, assists,  steals, blocks, turnovers, personalFouls, plusMinus, trueShootingPercent, effectiveFieldGoalPercent, 3pointAttemptRate, freeThrowAttemptRate, offensiveReboundPercent, defensiveReboundPercent, totalReboundPercent, assistPercent, stealPercent, blockPercent, turnoverPercent, usagePercent, offensiveRating, defensiveRating,  tripleDouble, doubleDouble, team, opponent, home, playerID, dateID) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -98,7 +100,7 @@ func (p *PlayerPerformance) addToTable(db *sql.DB, dateID string) {
     if err != nil {
         fmt.Println(err)
     }
-    <-sem
+    <-sem // increment semaphore
 }
 
 func getBoxScoreUrls(dateID string, db *sql.DB) []string {
@@ -113,11 +115,11 @@ func getBoxScoreUrls(dateID string, db *sql.DB) []string {
         rows.Scan(&boxScore)
 		urls = append(urls, boxScore)
     }
-    // fmt.Println(urls)
     return urls // retunrs urls 
 }
 
-func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, team string, home string, opp string) {
+// function will go through the table and get all the stats from it
+func getStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, team string, home string, opp string) {
 	for {
 		tt:= z.Next()
 		if tt == html.ErrorToken {
@@ -126,7 +128,7 @@ func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, t
 		if tt == html.EndTagToken {
 			t := z.Token()
 			isTable := t.Data == "table"
-			if isTable {
+			if isTable { // return when you find end of the table
 				return
 			}
 		}
@@ -143,21 +145,21 @@ func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, t
                         player.bbrefid = t.Attr[2].Val
                         playerMap[t.Attr[2].Val] = player
                     }
+                    // get team, opp, home
                     player.stats["team"] = team
                     player.stats["opp"] = opp
                     player.stats["home"] = home
-					// fmt.Println(t.Attr[2].Val)
-			        z.Next()
+
+                    z.Next() // get next tag 
                     t := z.Token()
                     for t.Data != "tr" {
                         if(t.Data == "td" && tt == html.StartTagToken) {
-                            tt = z.Next()
+                            z.Next() // actual text is on next tag
                             text := (string)(z.Text())
                             stats := strings.TrimSpace(text)
-                            // fmt.Println(t.Attr[1].Val, stats)
-                            player.stats[t.Attr[1].Val] = stats
+                            player.stats[t.Attr[1].Val] = stats // set the players stats for the category
                         }
-                        tt = z.Next()
+                        tt = z.Next() // keep incrementing until you finish table row
                         t = z.Token()
 			        }
 				}
@@ -186,7 +188,7 @@ func getTables(url string, db *sql.DB, dateID string) {
             t := z.Token()
 			isTable := t.Data == "table"
 			if isTable {
-                team := strings.ToUpper(t.Attr[1].Val[4:7])
+                team := strings.ToUpper(t.Attr[1].Val[4:7]) // parse out team abrev
                 if i < 2 {
                     home = "0"
                     awayTeam = strings.ToUpper(team)
@@ -194,7 +196,7 @@ func getTables(url string, db *sql.DB, dateID string) {
                     homeTeam = strings.ToUpper(team)
                     opp = strings.ToUpper(awayTeam)
                 }
-				getBasicStats(z, playerMap, team, home, opp)
+				getStats(z, playerMap, team, home, opp)
                 i += 1
 			}
 		}
@@ -229,5 +231,5 @@ func main() {
     dateID := arguements[1]
 
     updateAndInsertPlayerRef(dateID, db)
-	waitGroup.Wait()
+	waitGroup.Wait() // wait until all goroutines are done to finish
 }
