@@ -113,7 +113,7 @@ func getBoxScoreUrls(dateID string, db *sql.DB) []string {
         rows.Scan(&boxScore)
 		urls = append(urls, boxScore)
     }
-    fmt.Println(urls)
+    // fmt.Println(urls)
     return urls // retunrs urls 
 }
 
@@ -186,13 +186,13 @@ func getTables(url string, db *sql.DB, dateID string) {
             t := z.Token()
 			isTable := t.Data == "table"
 			if isTable {
-                team := t.Attr[1].Val[4:7]
+                team := strings.ToUpper(t.Attr[1].Val[4:7])
                 if i < 2 {
                     home = "0"
-                    awayTeam = team
+                    awayTeam = strings.ToUpper(team)
                 } else {
-                    homeTeam = team
-                    opp = awayTeam
+                    homeTeam = strings.ToUpper(team)
+                    opp = strings.ToUpper(awayTeam)
                 }
 				getBasicStats(z, playerMap, team, home, opp)
                 i += 1
