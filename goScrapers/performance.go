@@ -12,6 +12,7 @@ import (
 )
 
 var waitGroup sync.WaitGroup
+var sem = make(chan int, 50)
 
 const (
 	user     = "wsa@wsabasketball"
@@ -70,10 +71,16 @@ func newPlayerPerformance() *PlayerPerformance {
 
 func (p *PlayerPerformance) addToTable(db *sql.DB) {
     insertPerformance := "INSERT INTO performance (points, minutesPlayed, fieldGoals, fieldGoalsAttempted, fieldGoalPercent, 3PM, 3PA, 3PPercent, FT, FTA, FTPercent, offensiveRebounds, defensiveRebounds, totalRebounds, assists,  steals, blocks, turnovers, personalFouls, plusMinus, trueShootingPercent, effectiveFieldGoalPercent, 3pointAttemptRate, freeThrowAttemptRate, offensiveReboundPercent, defensiveReboundPercent, totalReboundPercent, assistPercent, stealPercent, blockPercent, turnoverPercent, usagePercent, offensiveRating, defensiveRating,  tripleDouble, doubleDouble, team, opponent, home, playerID, dateID) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    playerID := "1234"
+    playerID := "2748"
     dateID := "911"
-    db.Exec(insertPerformance, p.stats["pts"], p.stats["mp"], p.stats["fg"], p.stats["fga"], p.stats["fg_pct"], p.stats["fg3"], p.stats["fg3a"], p.stats["fg3_pct"], p.stats["ft"], p.stats["ft"], p.stats["fta"], p.stats["ft_pct"], p.stats["orb"], p.stats["drb"], p.stats["trb"], p.stats["blk"], p.stats["tov"], p.stats["pf"], p.stats["pts"], p.stats["plus_minus"], p.stats["ts_pct"], p.stats["efg_pct"], p.stats["fg3a_per_fga_pct"], p.stats["fta_per_fga_pct"], p.stats["orb_pct"], p.stats["drb_pct"], p.stats["ast_pct"], p.stats["stl_pct"], p.stats["blk_pct"], p.stats["tov_pct"], p.stats["usg_pct"], p.stats["off_rtg"], p.stats["def_rtg"], p.stats["triple_double"], p.stats["double_double"], p.stats["team"], p.stats["opp"], p.stats["home"], playerID, dateID)
+    _, err := db.Exec(insertPerformance, p.stats["pts"], p.stats["mp"], p.stats["fg"], p.stats["fga"], p.stats["fg_pct"], p.stats["fg3"], p.stats["fg3a"], p.stats["fg3_pct"], p.stats["ft"], p.stats["ft"], p.stats["fta"], p.stats["ft_pct"], p.stats["orb"], p.stats["drb"], p.stats["trb"], p.stats["ast"], p.stats["stl"], p.stats["blk"], p.stats["tov"], p.stats["pf"], p.stats["plus_minus"], p.stats["ts_pct"], p.stats["efg_pct"], p.stats["fg3a_per_fga_pct"], p.stats["fta_per_fga_pct"], p.stats["orb_pct"], p.stats["drb_pct"], p.stats["ast_pct"], p.stats["stl_pct"], p.stats["blk_pct"], p.stats["tov_pct"], p.stats["usg_pct"], p.stats["off_rtg"], p.stats["def_rtg"], p.stats["triple_double"], p.stats["double_double"], p.stats["team"], p.stats["opp"], p.stats["home"], playerID, dateID)
+    if err != nil {
+        fmt.Println(err)
+    }
+    <-sem
+	waitGroup.Done()
 }
+
 func getBoxScoreUrls(startDay time.Time, endDay time.Time, db *sql.DB) []string {
     var boxScore string
     urls := make([]string, 0)
@@ -139,7 +146,7 @@ func getBasicStats(z *html.Tokenizer, playerMap map[string]*PlayerPerformance, t
 }
 
 
-func getTables(url string)  {
+func getTables(url string, db *sql.DB)  {
     playerMap := make(map[string]*PlayerPerformance)
 	resp, _ := http.Get(url)
 	z := html.NewTokenizer(resp.Body)
@@ -170,11 +177,13 @@ func getTables(url string)  {
 			}
 		}
 	}
-    for player, val :=range( playerMap) {
+    for _, val :=range( playerMap) {
         if val.stats["opp"] == ""{
             val.stats["opp"] = homeTeam
         }
-        fmt.Println(player, val.stats)
+        sem <-1
+		waitGroup.Add(1)
+        go val.addToTable(db)
     }
 	waitGroup.Done()
 
@@ -183,7 +192,7 @@ func updateAndInsertPlayerRef(startDay time.Time, endDay time.Time, db *sql.DB) 
     urls := getBoxScoreUrls(startDay, endDay, db)
 	for _, url := range urls {
 		waitGroup.Add(1)
-		getTables(url)
+		go getTables(url, db)
 	}
 }
 func main() {
